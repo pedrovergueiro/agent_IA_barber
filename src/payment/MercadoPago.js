@@ -2,9 +2,9 @@ const axios = require('axios');
 
 class MercadoPago {
     constructor() {
-        this.accessToken = process.env.MP_ACCESS_TOKEN || 'TEST-804200106-010125-4385731270595563-TEST';
-        this.userId = '804200106';
-        this.applicationId = '4385731270595563';
+        this.accessToken = process.env.MP_ACCESS_TOKEN || 'seu_access_token_aqui';
+        this.userId = process.env.MP_USER_ID || 'seu_user_id_aqui';
+        this.applicationId = process.env.MP_APPLICATION_ID || 'seu_application_id_aqui';
         this.baseURL = 'https://api.mercadopago.com';
     }
 

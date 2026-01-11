@@ -58,8 +58,8 @@ vercel --prod
 
 ```env
 MP_ACCESS_TOKEN=seu_token_real_mercado_pago
-MP_USER_ID=804200106
-MP_APPLICATION_ID=4385731270595563
+MP_USER_ID=seu_user_id_aqui
+MP_APPLICATION_ID=seu_application_id_aqui
 WEBHOOK_URL=https://seu-app.vercel.app
 NODE_ENV=production
 VERCEL=1
