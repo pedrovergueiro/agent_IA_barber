@@ -97,6 +97,12 @@ class SmartReminders {
             
             const message = reminderMessages[Math.floor(Math.random() * reminderMessages.length)];
             
+            // 🚫 Não enviar lembretes para grupos
+            if (booking.user_id.includes('@g.us')) {
+                console.log(`🚫 Lembrete ignorado para grupo: ${booking.user_id}`);
+                return;
+            }
+            
             await this.client.sendMessage(booking.user_id, message);
             console.log(`⏰ Lembrete de agendamento enviado para ${booking.customer_name}`);
             
@@ -150,6 +156,12 @@ class SmartReminders {
             ];
             
             reminderText += callToActions[Math.floor(Math.random() * callToActions.length)];
+            
+            // 🚫 Não enviar lembretes para grupos
+            if (client.user_id.includes('@g.us')) {
+                console.log(`🚫 Lembrete mensal ignorado para grupo: ${client.user_id}`);
+                return;
+            }
             
             await this.client.sendMessage(client.user_id, reminderText);
             console.log(`📅 Lembrete mensal enviado para ${client.customer_name || client.user_id.replace('@c.us', '')}`);

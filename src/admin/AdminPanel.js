@@ -1251,7 +1251,12 @@ Seu agendamento foi cancelado:
 💰 O reembolso será processado em até 5 dias úteis.`;
 
         try {
-            await this.client.sendMessage(booking.user_id, clientText);
+            // 🚫 Não enviar notificações para grupos
+            if (!booking.user_id.includes('@g.us')) {
+                await this.client.sendMessage(booking.user_id, clientText);
+            } else {
+                console.log(`🚫 Notificação de cancelamento ignorada para grupo: ${booking.user_id}`);
+            }
         } catch (error) {
             console.error('Erro ao notificar cliente:', error);
         }

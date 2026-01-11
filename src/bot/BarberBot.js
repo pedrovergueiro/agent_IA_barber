@@ -26,6 +26,12 @@ class BarberBot {
         const userId = message.from;
         const messageText = message.body.toLowerCase().trim();
         
+        // 🚫 IGNORAR GRUPOS - Só responder em conversas privadas
+        if (message.from.includes('@g.us')) {
+            console.log(`🚫 Mensagem ignorada de grupo: ${message.from}`);
+            return; // Não processar mensagens de grupos
+        }
+        
         // Verificar comandos de admin primeiro
         if (messageText === '/admin') {
             await this.adminPanel.handleAdminLogin(message, messageText);
@@ -1029,7 +1035,12 @@ ID do Agendamento: ${bookingId}`;
             // Enviar para todos os administradores
             for (const adminNumber of this.adminNumbers) {
                 try {
-                    await this.client.sendMessage(adminNumber, adminText);
+                    // 🚫 Não enviar notificações para grupos (mesmo que admin)
+                    if (!adminNumber.includes('@g.us')) {
+                        await this.client.sendMessage(adminNumber, adminText);
+                    } else {
+                        console.log(`🚫 Notificação admin ignorada para grupo: ${adminNumber}`);
+                    }
                 } catch (error) {
                     console.error('Erro ao notificar admin:', error);
                 }
@@ -1396,7 +1407,12 @@ Pouso Alegre/MG
 
 Aguardamos você! 😊`;
 
-                await this.client.sendMessage(userId, confirmText);
+                // 🚫 Não enviar confirmação para grupos
+                if (!userId.includes('@g.us')) {
+                    await this.client.sendMessage(userId, confirmText);
+                } else {
+                    console.log(`🚫 Confirmação ignorada para grupo: ${userId}`);
+                }
                 
                 // Notificar barbeiro sobre novo agendamento
                 const adminNotification = `
@@ -1413,7 +1429,12 @@ ID: ${booking.id}`;
 
                 for (const adminNumber of this.adminNumbers) {
                     try {
-                        await this.client.sendMessage(adminNumber, adminNotification);
+                        // 🚫 Não enviar notificações para grupos (mesmo que admin)
+                        if (!adminNumber.includes('@g.us')) {
+                            await this.client.sendMessage(adminNumber, adminNotification);
+                        } else {
+                            console.log(`🚫 Notificação admin ignorada para grupo: ${adminNumber}`);
+                        }
                     } catch (error) {
                         console.error('Erro ao notificar admin:', error);
                     }
