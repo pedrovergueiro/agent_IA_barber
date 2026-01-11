@@ -1,0 +1,38 @@
+# Arquivos locais
+.env
+.env.local
+.env.development
+.env.production
+
+# Dados locais
+data/
+.wwebjs_auth/
+.wwebjs_cache/
+
+# Logs
+*.log
+logs/
+
+# Dependências
+node_modules/
+
+# Arquivos temporários
+.tmp/
+tmp/
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Documentação local
+*.md
+!README.md
+
+# Scripts locais
+monitor.js
+start.bat
+install.bat

@@ -1,0 +1,52 @@
+{
+  "name": "whatsapp-barber-bot",
+  "version": "1.0.0",
+  "description": "🤖 Agente de IA completo para WhatsApp - Sistema de agendamento para barbearias com IA própria, pagamentos integrados e painel administrativo",
+  "main": "src/index.js",
+  "author": "Pedro Vergueiro <pedro@example.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pedrovergueiro/agent_IA_barber.git"
+  },
+  "homepage": "https://github.com/pedrovergueiro/agent_IA_barber#readme",
+  "bugs": {
+    "url": "https://github.com/pedrovergueiro/agent_IA_barber/issues"
+  },
+  "keywords": [
+    "whatsapp",
+    "bot",
+    "barbearia",
+    "agendamento",
+    "ia",
+    "artificial-intelligence",
+    "mercado-pago",
+    "nodejs",
+    "vercel",
+    "serverless"
+  ],
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "vercel-dev": "vercel dev",
+    "deploy": "node deploy.js",
+    "deploy-vercel": "vercel --prod",
+    "monitor": "node monitor.js",
+    "status": "curl -s http://localhost:3000/status | json_pp || echo 'Servidor offline'",
+    "qr": "echo 'QR Code disponível em: http://localhost:3000/qr'",
+    "reconnect": "curl -X POST http://localhost:3000/reconnect"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "express": "^4.18.2",
+    "moment": "^2.29.4",
+    "node-cron": "^3.0.3",
+    "qrcode": "^1.5.4",
+    "qrcode-terminal": "^0.12.0",
+    "sqlite3": "^5.1.6",
+    "whatsapp-web.js": "^1.23.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}
