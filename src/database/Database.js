@@ -435,6 +435,28 @@ class Database {
         });
     }
 
+    async getPaidClientsAfterDate(sinceDate) {
+        return new Promise((resolve, reject) => {
+            const query = `
+                SELECT user_id, customer_name, service_name as last_service_name,
+                       MAX(date) as last_booking_date,
+                       COUNT(*) as total_bookings
+                FROM bookings 
+                WHERE date >= ? AND status = 'confirmed' AND payment_id IS NOT NULL
+                GROUP BY user_id
+                ORDER BY last_booking_date DESC
+            `;
+
+            this.db.all(query, [sinceDate], (err, rows) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(rows);
+                }
+            });
+        });
+    }
+
     close() {
         this.db.close((err) => {
             if (err) {

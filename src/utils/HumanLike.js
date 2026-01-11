@@ -7,10 +7,16 @@ class HumanLike {
     async simulateTyping(chatId, duration = 2000) {
         try {
             const chat = await this.client.getChatById(chatId);
-            await chat.sendStateTyping();
+            // Tentar diferentes métodos de digitação
+            if (chat.sendStateTyping) {
+                await chat.sendStateTyping();
+            } else if (this.client.sendPresenceAvailable) {
+                await this.client.sendPresenceAvailable();
+            }
             await this.delay(duration);
         } catch (error) {
-            console.log('Erro ao simular digitação:', error.message);
+            // Silenciar erro de digitação - não é crítico
+            // console.log('Erro ao simular digitação:', error.message);
         }
     }
 

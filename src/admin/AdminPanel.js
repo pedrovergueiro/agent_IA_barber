@@ -209,28 +209,35 @@ Digite o número da opção desejada:`;
     async showDashboard(message) {
         await this.human.sendHumanMessage(message, "Gerando relatório... 📊");
         
+        // Usar data atual do sistema (sem forçar timezone)
         const today = moment().format('YYYY-MM-DD');
+        const todayDisplay = moment().format('DD/MM/YYYY');
+        
+        console.log(`📊 Dashboard: Data atual do sistema: ${today} (${todayDisplay})`);
+        console.log(`📊 Dashboard: Buscando agendamentos para ${today}`);
+        
         const bookings = await this.db.getBookingsByDate(today);
+        console.log(`📊 Dashboard: Encontrados ${bookings.length} agendamentos:`, bookings);
         
         const confirmed = bookings.filter(b => b.status === 'confirmed').length;
         const pending = bookings.filter(b => b.status === 'pending').length;
         const cancelled = bookings.filter(b => b.status === 'cancelled').length;
         
-        // Calcular receita
-        const services = Settings.get('services');
+        // Calcular receita usando Services.extractPrice
+        const Services = require('../data/Services');
         const totalRevenue = bookings
             .filter(b => b.status === 'confirmed')
             .reduce((sum, booking) => {
-                const service = services.find(s => s.id === booking.service_id);
+                const service = Services.getById(booking.service_id);
                 if (service) {
-                    const price = parseFloat(service.price.replace(/[^\d,]/g, '').replace(',', '.'));
-                    return sum + (price || 0);
+                    const price = Services.extractPrice(service.price);
+                    return sum + price;
                 }
                 return sum;
             }, 0);
 
         const dashboardText = `
-📊 *DASHBOARD - ${moment().format('DD/MM/YYYY')}*
+📊 *DASHBOARD - ${todayDisplay}*
 
 📈 *Agendamentos Hoje:*
 ✅ Confirmados: ${confirmed}
@@ -252,7 +259,8 @@ Receita estimada: R$ ${totalRevenue.toFixed(2).replace('.', ',')}
         
         if (nextBookings.length > 0) {
             nextBookings.forEach(booking => {
-                finalDashboard += `\n🕐 ${booking.time} - ${booking.customer_name} (${booking.service_name})`;
+                const bookingDate = moment(booking.date).format('DD/MM');
+                finalDashboard += `\n🕐 ${booking.time} (${bookingDate}) - ${booking.customer_name} (${booking.service_name})`;
             });
         } else {
             finalDashboard += '\nNenhum agendamento pendente para hoje.';
@@ -307,6 +315,7 @@ Digite a opção:`;
 *Opções:*
 🆕 *NOVO* - Adicionar serviço
 ✏️ *EDITAR [ID]* - Ex: EDITAR 1
+💰 *PRECO [ID] [VALOR]* - Ex: PRECO 1 25.50
 ❌ *REMOVER [ID]* - Ex: REMOVER 1
 🔥 *POPULAR [ID]* - Marcar como popular
 ${this.human.numberToEmoji(0)} Voltar ao Menu Principal
@@ -510,6 +519,18 @@ ${this.human.numberToEmoji(0)} Voltar ao Menu Principal`;
         if (input.toUpperCase().startsWith('EDITAR ')) {
             const serviceId = parseInt(input.split(' ')[1]);
             await this.editService(message, serviceId);
+            return;
+        }
+
+        if (input.toUpperCase().startsWith('PRECO ')) {
+            const parts = input.split(' ');
+            if (parts.length >= 3) {
+                const serviceId = parseInt(parts[1]);
+                const newPrice = parts.slice(2).join(' ');
+                await this.updateServicePrice(message, serviceId, newPrice);
+            } else {
+                await this.human.sendHumanMessage(message, "❌ Formato inválido! Use: PRECO [ID] [VALOR]\nEx: PRECO 1 25.50");
+            }
             return;
         }
 
@@ -968,6 +989,47 @@ ${hasQR ? '⏳ QR Code aguardando escaneamento' : '🟢 Pronto para uso'}`;
         }
     }
 
+    async updateServicePrice(message, serviceId, newPrice) {
+        const services = Settings.get('services');
+        const service = services.find(s => s.id === serviceId);
+        
+        if (!service) {
+            await this.human.sendHumanMessage(message, "❌ Serviço não encontrado!");
+            return;
+        }
+
+        try {
+            // Validar e formatar o preço
+            let price = parseFloat(newPrice.replace(',', '.'));
+            
+            if (isNaN(price) || price < 0) {
+                await this.human.sendHumanMessage(message, "❌ Preço inválido! Use apenas números.\nEx: 25.50 ou 25,50");
+                return;
+            }
+
+            // Garantir valor mínimo de 1 centavo
+            if (price === 0) {
+                price = 0.01;
+                await this.human.sendHumanMessage(message, "⚠️ Valor ajustado para mínimo: R$ 0,01");
+            }
+
+            // Formatar preço para exibição
+            const formattedPrice = `R$ ${price.toFixed(2).replace('.', ',')}`;
+            
+            // Atualizar o serviço
+            Settings.updateService(serviceId, { price: formattedPrice });
+            
+            await this.human.sendHumanMessage(message, `✅ Preço do serviço "${service.name}" atualizado para ${formattedPrice}!`);
+            
+            // Mostrar menu atualizado
+            await this.showServicesMenu(message);
+            
+        } catch (error) {
+            console.error('Erro ao atualizar preço:', error);
+            await this.human.sendHumanMessage(message, "❌ Erro ao atualizar preço. Tente novamente.");
+        }
+    }
+
     async toggleServicePopular(message, serviceId) {
         const services = Settings.get('services');
         const service = services.find(s => s.id === serviceId);
@@ -1116,11 +1178,15 @@ ${hasQR ? '⏳ QR Code aguardando escaneamento' : '🟢 Pronto para uso'}`;
                 const status = booking.status === 'confirmed' ? '✅' : 
                               booking.status === 'cancelled' ? '❌' : '⏳';
                 
+                const bookingDate = moment(booking.date).format('DD/MM/YYYY');
+                
                 bookingText += `${status} *ID: ${booking.id}*\n`;
                 bookingText += `👤 ${booking.customer_name}\n`;
                 bookingText += `✂️ ${booking.service_name}\n`;
-                bookingText += `🕐 ${booking.time}\n`;
-                bookingText += `📱 ${booking.user_id.replace('@c.us', '')}\n\n`;
+                bookingText += `📅 Data Agendada: ${bookingDate}\n`;
+                bookingText += `🕐 Horário: ${booking.time}\n`;
+                bookingText += `📱 ${booking.user_id.replace('@c.us', '')}\n`;
+                bookingText += `💳 Status: ${booking.status}\n\n`;
             });
 
             bookingText += `${this.human.numberToEmoji(0)} Voltar`;
@@ -1220,25 +1286,37 @@ Seu agendamento foi cancelado:
     }
 
     async showTodayBookings(message) {
+        // Usar data atual do sistema
         const today = moment().format('YYYY-MM-DD');
+        const todayDisplay = moment().format('DD/MM/YYYY');
+        
+        console.log(`📅 Data atual do sistema: ${today} (${todayDisplay})`);
+        console.log(`📅 Buscando agendamentos para hoje: ${today}`);
+        
         const bookings = await this.db.getBookingsByDate(today);
+        console.log(`📅 Encontrados ${bookings.length} agendamentos:`, bookings);
         
         if (bookings.length === 0) {
-            await this.human.sendHumanMessage(message, '📅 Nenhum agendamento para hoje.');
+            await this.human.sendHumanMessage(message, `📅 Nenhum agendamento para hoje (${todayDisplay}).\n\n💡 *Dica:* Agendamentos confirmados aparecerão aqui automaticamente.`);
             return;
         }
 
-        let bookingText = `📅 *AGENDAMENTOS DE HOJE (${moment().format('DD/MM/YYYY')})*\n\n`;
+        let bookingText = `📅 *AGENDAMENTOS DE HOJE (${todayDisplay})*\n\n`;
         
         bookings.forEach(booking => {
             const status = booking.status === 'confirmed' ? '✅' : 
                           booking.status === 'cancelled' ? '❌' : '⏳';
             
+            // Formatar a data do agendamento
+            const bookingDate = moment(booking.date).format('DD/MM/YYYY');
+            
             bookingText += `${status} *ID: ${booking.id}*\n`;
             bookingText += `👤 ${booking.customer_name}\n`;
             bookingText += `✂️ ${booking.service_name}\n`;
-            bookingText += `🕐 ${booking.time}\n`;
-            bookingText += `📱 ${booking.user_id.replace('@c.us', '')}\n\n`;
+            bookingText += `📅 Data Agendada: ${bookingDate}\n`;
+            bookingText += `🕐 Horário: ${booking.time}\n`;
+            bookingText += `📱 ${booking.user_id.replace('@c.us', '')}\n`;
+            bookingText += `💳 Status: ${booking.status}\n\n`;
         });
 
         bookingText += `${this.human.numberToEmoji(0)} Voltar`;
