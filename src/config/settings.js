@@ -34,7 +34,7 @@ class Settings {
         return {
             adminPassword: "admin123",
             businessInfo: {
-                name: "Barbearia Faisqueira",
+                name: "Paulinho Barbearia",
                 address: "Rua Antônio Scodeler, 885 - Faisqueira",
                 city: "Pouso Alegre/MG",
                 cep: "37555-100",

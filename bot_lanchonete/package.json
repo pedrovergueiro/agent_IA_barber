@@ -1,0 +1,25 @@
+{
+  "name": "whatsapp-lanchonete-bot",
+  "version": "1.0.0",
+  "description": "Bot WhatsApp para lanchonete com sistema de pedidos e delivery",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js"
+  },
+  "keywords": ["whatsapp", "bot", "lanchonete", "pedidos", "delivery", "pizza", "lanches"],
+  "author": "Kiro AI",
+  "license": "MIT",
+  "dependencies": {
+    "whatsapp-web.js": "^1.23.0",
+    "qrcode-terminal": "^0.12.0",
+    "qrcode": "^1.5.3",
+    "express": "^4.18.2",
+    "sqlite3": "^5.1.6",
+    "moment": "^2.29.4",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}

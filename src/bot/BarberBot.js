@@ -49,6 +49,13 @@ class BarberBot {
             return;
         }
 
+        // Comando global para voltar ao menu principal
+        if (messageText === '0' || messageText.toLowerCase().includes('voltar ao menu')) {
+            await this.sendWelcomeMessage(message);
+            this.userSessions.set(userId, { step: 'menu', userId: userId });
+            return;
+        }
+
         // Verificar se é tentativa de senha de admin
         if (await this.adminPanel.handlePasswordAttempt(message)) {
             return;
@@ -97,6 +104,9 @@ class BarberBot {
                     } else if (messageText.includes('cancelar') || messageText.includes('4')) {
                         await this.showUserBookings(message);
                         session.step = 'canceling_booking';
+                    } else if (messageText === '0' || messageText.includes('voltar')) {
+                        await this.sendWelcomeMessage(message);
+                        session.step = 'menu';
                     } else {
                         await this.sendMenuOptions(message);
                     }
@@ -338,6 +348,8 @@ Digite o número do serviço! 👆`;
     }
 
     async sendDateSelection(message) {
+        const userId = message.from;
+        
         await this.human.sendHumanMessage(message, "Deixa eu ver as datas disponíveis... 📅");
         
         const availableDates = this.getAvailableDates();
@@ -390,7 +402,7 @@ Essas são as datas que temos disponíveis:`,
         };
 
         try {
-            await this.human.sendHumanButtonMessage(message.from, buttonMessage);
+            await this.human.sendHumanMessage(message, buttonMessage);
         } catch (error) {
             // Fallback para texto simples
             let dateText = `📅 *QUAL DIA VOCÊ PREFERE?*
@@ -427,11 +439,14 @@ Essas são as datas que temos disponíveis:`,
             });
 
             dateText += `\n${this.human.numberToEmoji(0)} Voltar aos Serviços\n\nDigite o número da data! 👆`;
+            
             await this.human.sendHumanMessage(message, dateText);
         }
     }
 
     async sendTimeSelection(message, selectedDate) {
+        const userId = message.from;
+        
         await this.human.sendHumanMessage(message, "Vou verificar os horários livres... ⏰");
         
         const availableTimes = await this.getAvailableTimes(selectedDate);
@@ -582,7 +597,7 @@ Que tal escolher outro dia? Tenho certeza que vamos achar um horário perfeito p
                     headerType: 1
                 };
 
-                await this.human.sendHumanButtonMessage(message.from, buttonMessage);
+                await this.human.sendHumanMessage(message, buttonMessage);
                 
             } catch (buttonError) {
                 // Fallback final para texto simples
@@ -616,12 +631,15 @@ Que tal escolher outro dia? Tenho certeza que vamos achar um horário perfeito p
                 });
 
                 timeText += `\n${this.human.numberToEmoji(0)} Voltar às Datas\n\nDigite o número do horário! 👆`;
+                
                 await this.human.sendHumanMessage(message, timeText);
             }
         }
     }
 
     async requestCustomerName(message) {
+        const userId = message.from;
+        
         const nameMessages = [
             `${this.human.getRandomResponse('success')} Horário reservado!
 
@@ -642,6 +660,8 @@ Qual é seu nome completo?`
     }
 
     async sendBookingSummary(message, session) {
+        const userId = message.from;
+        
         await this.human.sendHumanMessage(message, "Deixa eu organizar tudo aqui... 📋");
         
         const Services = require('../data/Services');
@@ -725,7 +745,7 @@ Para garantir seu horário, preciso que você pague o sinal de 50%. Tá tudo cer
         };
 
         try {
-            await this.human.sendHumanButtonMessage(message.from, buttonMessage);
+            await this.human.sendHumanMessage(message, buttonMessage);
         } catch (error) {
             // Fallback para texto simples
             const fallbackText = summaryText + `
@@ -797,7 +817,7 @@ Após o pagamento, seu agendamento será confirmado automaticamente! ✅
 
 ⚠️ *Importante:* Você tem 30 minutos para realizar o pagamento, após isso o horário será liberado.`;
 
-            await message.reply(paymentInfoText);
+            await this.human.sendHumanMessage(message, paymentInfoText);
 
             // Segunda mensagem: Apenas o código PIX para facilitar a cópia
             const pixMessages = [
@@ -807,8 +827,10 @@ Após o pagamento, seu agendamento será confirmado automaticamente! ✅
             ];
             
             const randomPixMessage = pixMessages[Math.floor(Math.random() * pixMessages.length)];
+            
             await this.human.sendHumanMessage(message, randomPixMessage);
-            await message.reply(paymentData.qr_code);
+            
+            await this.human.sendHumanMessage(message, paymentData.qr_code);
 
             // Atualizar sessão e iniciar monitoramento automático
             session.step = 'payment_pending';
@@ -826,6 +848,7 @@ Após o pagamento, seu agendamento será confirmado automaticamente! ✅
     }
 
     async sendScheduleInfo(message) {
+        const userId = message.from;
         const schedule = Settings.get('schedule');
         const business = Settings.get('businessInfo');
         
@@ -849,11 +872,13 @@ Após o pagamento, seu agendamento será confirmado automaticamente! ✅
         });
         
         scheduleText += `\n📞 Para emergências: ${business.phone}`;
+        scheduleText += `\n\n*Digite 0 para voltar ao menu principal*`;
 
-        await message.reply(scheduleText);
+        await this.human.sendHumanMessage(message, scheduleText);
     }
 
     async sendLocationInfo(message) {
+        const userId = message.from;
         const business = Settings.get('businessInfo');
         
         const locationText = `
@@ -870,14 +895,16 @@ Após o pagamento, seu agendamento será confirmado automaticamente! ✅
 🚗 *Como chegar:*
 Estamos localizados no bairro Faisqueira, próximo ao centro da cidade.
 
-*Digite 1 para voltar ao menu principal*`;
+*Digite 0 para voltar ao menu principal*`;
 
-        await message.reply(locationText);
+        await this.human.sendHumanMessage(message, locationText);
     }
 
     // ========== MÉTODOS DE CANCELAMENTO PARA CLIENTES ==========
 
     async showUserBookings(message) {
+        const userId = message.from;
+        
         await this.human.sendHumanMessage(message, "Deixa eu ver seus agendamentos... 📋");
         
         try {
@@ -1550,6 +1577,8 @@ ID: ${booking.id}`;
     }
 
     async checkPaymentStatus(message, session) {
+        const userId = message.from;
+        
         if (!session.paymentId || session.userId !== message.from) {
             await this.human.sendHumanMessage(message, "❌ Nenhum pagamento encontrado para você. Faça um novo agendamento.");
             return;
@@ -1601,12 +1630,10 @@ ID: ${booking.id}`;
             
             if (error.message.includes('not found')) {
                 await this.human.sendHumanMessage(message, 
-                    "⏳ PIX ainda não foi processado pelo sistema. Aguarde alguns minutos e tente novamente."
-                );
+                    "⏳ PIX ainda não foi processado pelo sistema. Aguarde alguns minutos e tente novamente.");
             } else {
                 await this.human.sendHumanMessage(message, 
-                    "❌ Erro ao verificar pagamento. Tente novamente em alguns minutos."
-                );
+                    "❌ Erro ao verificar pagamento. Tente novamente em alguns minutos.");
             }
         }
     }
@@ -1629,9 +1656,10 @@ ID: ${booking.id}`;
         const maxAttempts = 60; // 5 minutos (60 x 5 segundos)
         
         if (attempts >= maxAttempts) {
-            await this.human.sendHumanMessage(message, 
-                "⏰ Tempo limite atingido. Se você já pagou, digite 'verificar' para checar novamente."
-            );
+            await this.humanBehavior.queueMessage(message.from, 
+                "⏰ Tempo limite atingido. Se você já pagou, digite 'verificar' para checar novamente.", {
+                type: 'payment'
+            });
             return;
         }
 
@@ -1660,8 +1688,7 @@ ID: ${booking.id}`;
             } else if (paymentStatus.status === 'rejected' || paymentStatus.status === 'cancelled') {
                 // Pagamento rejeitado
                 await this.human.sendHumanMessage(message, 
-                    "❌ Pagamento não foi aprovado. Entre em contato conosco se houver algum problema."
-                );
+                    "❌ Pagamento não foi aprovado. Entre em contato conosco se houver algum problema.");
                 this.userSessions.delete(message.from);
                 return;
             }
@@ -1757,8 +1784,7 @@ Obrigado pela preferência! 🙏`;
         } catch (error) {
             console.error(`❌ Erro ao confirmar agendamento para usuário ${message.from}:`, error);
             await this.human.sendHumanMessage(message, 
-                "❌ Erro ao confirmar agendamento. Entre em contato conosco com o comprovante do pagamento."
-            );
+                "❌ Erro ao confirmar agendamento. Entre em contato conosco com o comprovante do pagamento.");
         }
     }
 }

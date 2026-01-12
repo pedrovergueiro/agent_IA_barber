@@ -177,7 +177,8 @@ class Database {
                 if (err) {
                     reject(err);
                 } else {
-                    resolve(row.count === 0);
+                    // Permitir até 3 agendamentos por horário
+                    resolve(row.count < 3);
                 }
             });
         });
@@ -344,12 +345,18 @@ class Database {
 
     async getOccupiedTimes(date) {
         return new Promise((resolve, reject) => {
+            // Buscar horários que já têm 3 ou mais agendamentos
             const query = `
-                SELECT time FROM bookings 
-                WHERE date = ? AND status IN ('confirmed', 'pending')
-                UNION
-                SELECT time FROM time_reservations 
-                WHERE date = ? AND status IN ('reserved', 'confirmed')
+                SELECT time, COUNT(*) as count
+                FROM (
+                    SELECT time FROM bookings 
+                    WHERE date = ? AND status IN ('confirmed', 'pending')
+                    UNION ALL
+                    SELECT time FROM time_reservations 
+                    WHERE date = ? AND status IN ('reserved', 'confirmed')
+                ) as all_times
+                GROUP BY time
+                HAVING count >= 3
             `;
 
             this.db.all(query, [date, date], (err, rows) => {
@@ -357,6 +364,30 @@ class Database {
                     reject(err);
                 } else {
                     resolve(rows.map(row => row.time));
+                }
+            });
+        });
+    }
+
+    // Nova função para contar agendamentos por horário
+    async getBookingCountByTime(date, time) {
+        return new Promise((resolve, reject) => {
+            const query = `
+                SELECT COUNT(*) as count
+                FROM (
+                    SELECT time FROM bookings 
+                    WHERE date = ? AND time = ? AND status IN ('confirmed', 'pending')
+                    UNION ALL
+                    SELECT time FROM time_reservations 
+                    WHERE date = ? AND time = ? AND status IN ('reserved', 'confirmed')
+                ) as all_times
+            `;
+
+            this.db.get(query, [date, time, date, time], (err, row) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(row ? row.count : 0);
                 }
             });
         });
@@ -449,6 +480,126 @@ class Database {
 
             this.db.all(query, [sinceDate], (err, rows) => {
                 if (err) {
+                    reject(err);
+                } else {
+                    resolve(rows);
+                }
+            });
+        });
+    }
+
+    // 📊 FUNÇÕES PARA RELATÓRIOS COMPLETOS
+    getAllBookings() {
+        return new Promise((resolve, reject) => {
+            const query = `
+                SELECT 
+                    b.*
+                FROM bookings b
+                ORDER BY b.date DESC, b.time DESC
+            `;
+            
+            this.db.all(query, [], (err, rows) => {
+                if (err) {
+                    console.error('Erro ao buscar todos os agendamentos:', err);
+                    reject(err);
+                } else {
+                    resolve(rows);
+                }
+            });
+        });
+    }
+
+    getBookingsByPeriod(startDate, endDate) {
+        return new Promise((resolve, reject) => {
+            const query = `
+                SELECT 
+                    b.*
+                FROM bookings b
+                WHERE b.date >= ? AND b.date <= ?
+                ORDER BY b.date ASC, b.time ASC
+            `;
+            
+            this.db.all(query, [startDate, endDate], (err, rows) => {
+                if (err) {
+                    console.error('Erro ao buscar agendamentos por período:', err);
+                    reject(err);
+                } else {
+                    resolve(rows);
+                }
+            });
+        });
+    }
+
+    // Estatísticas avançadas para relatórios
+    getBookingStats() {
+        return new Promise((resolve, reject) => {
+            const query = `
+                SELECT 
+                    COUNT(*) as total_bookings,
+                    COUNT(CASE WHEN status = 'confirmed' THEN 1 END) as confirmed_bookings,
+                    COUNT(CASE WHEN status = 'cancelled' THEN 1 END) as cancelled_bookings,
+                    COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_bookings,
+                    SUM(CASE WHEN status = 'confirmed' THEN total_amount ELSE 0 END) as confirmed_revenue,
+                    SUM(total_amount) as total_revenue,
+                    AVG(total_amount) as average_booking_value
+                FROM bookings
+            `;
+            
+            this.db.get(query, [], (err, row) => {
+                if (err) {
+                    console.error('Erro ao buscar estatísticas:', err);
+                    reject(err);
+                } else {
+                    resolve(row);
+                }
+            });
+        });
+    }
+
+    getTopServices() {
+        return new Promise((resolve, reject) => {
+            const query = `
+                SELECT 
+                    service_name as name,
+                    COUNT(id) as booking_count,
+                    SUM(CASE WHEN status = 'confirmed' THEN total_amount ELSE 0 END) as revenue
+                FROM bookings
+                WHERE service_name IS NOT NULL
+                GROUP BY service_name
+                ORDER BY booking_count DESC
+                LIMIT 10
+            `;
+            
+            this.db.all(query, [], (err, rows) => {
+                if (err) {
+                    console.error('Erro ao buscar serviços mais populares:', err);
+                    reject(err);
+                } else {
+                    resolve(rows);
+                }
+            });
+        });
+    }
+
+    getTopClients() {
+        return new Promise((resolve, reject) => {
+            const query = `
+                SELECT 
+                    customer_name,
+                    user_id,
+                    COUNT(*) as booking_count,
+                    SUM(CASE WHEN status = 'confirmed' THEN total_amount ELSE 0 END) as total_spent,
+                    MAX(date) as last_booking_date
+                FROM bookings
+                GROUP BY customer_name, user_id
+                HAVING booking_count > 1
+                ORDER BY booking_count DESC, total_spent DESC
+                LIMIT 10
+            `;
+            
+            this.db.all(query, [], (err, rows) => {
+                if (err) {
+                    console.error('Erro ao buscar clientes mais frequentes:', err);
                     reject(err);
                 } else {
                     resolve(rows);

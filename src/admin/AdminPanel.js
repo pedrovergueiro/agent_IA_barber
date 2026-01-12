@@ -282,9 +282,11 @@ Receita estimada: R$ ${totalRevenue.toFixed(2).replace('.', ',')}
 ${this.human.numberToEmoji(1)} Ver Agendamentos de Hoje
 ${this.human.numberToEmoji(2)} Ver Agendamentos por Data
 ${this.human.numberToEmoji(3)} Buscar por Cliente
-${this.human.numberToEmoji(4)} Cancelar Agendamento
-${this.human.numberToEmoji(5)} Bloquear Horário
-${this.human.numberToEmoji(6)} Desbloquear Horário
+${this.human.numberToEmoji(4)} 📊 Relatório Completo
+${this.human.numberToEmoji(5)} 📈 Relatório por Período
+${this.human.numberToEmoji(6)} Cancelar Agendamento
+${this.human.numberToEmoji(7)} Bloquear Horário
+${this.human.numberToEmoji(8)} Desbloquear Horário
 ${this.human.numberToEmoji(0)} Voltar ao Menu Principal
 
 Digite a opção:`;
@@ -476,16 +478,24 @@ ${this.human.numberToEmoji(0)} Voltar ao Menu Principal`;
                 this.adminSessions.set(message.from, session);
                 break;
             case '4':
+                await this.showCompleteReport(message);
+                break;
+            case '5':
+                await this.human.sendHumanMessage(message, "Digite o período:\nDD/MM/YYYY - DD/MM/YYYY\nEx: 01/01/2026 - 31/01/2026");
+                session.waitingFor = 'period_report';
+                this.adminSessions.set(message.from, session);
+                break;
+            case '6':
                 await this.human.sendHumanMessage(message, "Digite o ID do agendamento para cancelar:");
                 session.waitingFor = 'cancel_booking';
                 this.adminSessions.set(message.from, session);
                 break;
-            case '5':
+            case '7':
                 await this.human.sendHumanMessage(message, "Digite: DD/MM HH:MM\nEx: 15/01 14:30");
                 session.waitingFor = 'block_time';
                 this.adminSessions.set(message.from, session);
                 break;
-            case '6':
+            case '8':
                 await this.human.sendHumanMessage(message, "Digite: DD/MM HH:MM\nEx: 15/01 14:30");
                 session.waitingFor = 'unblock_time';
                 this.adminSessions.set(message.from, session);
@@ -1147,6 +1157,9 @@ ${hasQR ? '⏳ QR Code aguardando escaneamento' : '🟢 Pronto para uso'}`;
                 case 'client_search':
                     await this.searchBookingsByClient(message, input);
                     break;
+                case 'period_report':
+                    await this.showPeriodReport(message, input);
+                    break;
             }
             
             session.waitingFor = null;
@@ -1327,6 +1340,296 @@ Seu agendamento foi cancelado:
         bookingText += `${this.human.numberToEmoji(0)} Voltar`;
 
         await this.human.sendHumanMessage(message, bookingText);
+    }
+
+    // 📊 SISTEMA DE RELATÓRIOS COMPLETOS
+    async showCompleteReport(message) {
+        await this.human.sendHumanMessage(message, "📊 Gerando relatório completo... Aguarde...");
+        
+        try {
+            // Buscar todos os agendamentos
+            const allBookings = await this.db.getAllBookings();
+            
+            if (!allBookings || allBookings.length === 0) {
+                await this.human.sendHumanMessage(message, "📊 *RELATÓRIO COMPLETO*\n\n❌ Nenhum agendamento encontrado no sistema.");
+                return;
+            }
+
+            // Organizar dados por data
+            const bookingsByDate = {};
+            const today = moment().format('YYYY-MM-DD');
+            let totalBookings = 0;
+            let confirmedBookings = 0;
+            let cancelledBookings = 0;
+            let pendingBookings = 0;
+            let totalRevenue = 0;
+            let confirmedRevenue = 0;
+
+            allBookings.forEach(booking => {
+                const bookingDate = moment(booking.date).format('YYYY-MM-DD');
+                
+                if (!bookingsByDate[bookingDate]) {
+                    bookingsByDate[bookingDate] = [];
+                }
+                bookingsByDate[bookingDate].push(booking);
+                
+                totalBookings++;
+                
+                // Contar por status
+                switch (booking.status) {
+                    case 'confirmed':
+                        confirmedBookings++;
+                        confirmedRevenue += parseFloat(booking.total_amount || 0);
+                        break;
+                    case 'cancelled':
+                        cancelledBookings++;
+                        break;
+                    default:
+                        pendingBookings++;
+                }
+                
+                totalRevenue += parseFloat(booking.total_amount || 0);
+            });
+
+            // Gerar relatório resumido
+            let reportText = `📊 *RELATÓRIO COMPLETO DE AGENDAMENTOS*\n`;
+            reportText += `📅 *Gerado em:* ${moment().format('DD/MM/YYYY HH:mm')}\n\n`;
+            
+            reportText += `📈 *RESUMO GERAL:*\n`;
+            reportText += `• Total de Agendamentos: ${totalBookings}\n`;
+            reportText += `• ✅ Confirmados: ${confirmedBookings}\n`;
+            reportText += `• ❌ Cancelados: ${cancelledBookings}\n`;
+            reportText += `• ⏳ Pendentes: ${pendingBookings}\n`;
+            reportText += `• 💰 Receita Total: R$ ${totalRevenue.toFixed(2)}\n`;
+            reportText += `• 💚 Receita Confirmada: R$ ${confirmedRevenue.toFixed(2)}\n\n`;
+
+            // Agendamentos por data (próximos 7 dias)
+            reportText += `📅 *PRÓXIMOS AGENDAMENTOS:*\n`;
+            
+            const sortedDates = Object.keys(bookingsByDate).sort();
+            const futureDates = sortedDates.filter(date => date >= today).slice(0, 7);
+            
+            if (futureDates.length === 0) {
+                reportText += `❌ Nenhum agendamento futuro encontrado.\n\n`;
+            } else {
+                futureDates.forEach(date => {
+                    const dateBookings = bookingsByDate[date];
+                    const dateFormatted = moment(date).format('DD/MM/YYYY');
+                    const dayName = moment(date).format('dddd');
+                    
+                    reportText += `\n📅 *${dateFormatted} (${dayName})*\n`;
+                    reportText += `   ${dateBookings.length} agendamento(s)\n`;
+                    
+                    dateBookings.forEach(booking => {
+                        const status = booking.status === 'confirmed' ? '✅' : 
+                                      booking.status === 'cancelled' ? '❌' : '⏳';
+                        reportText += `   ${status} ${booking.time} - ${booking.customer_name}\n`;
+                        reportText += `      ${booking.service_name} (R$ ${parseFloat(booking.total_amount || 0).toFixed(2)})\n`;
+                    });
+                });
+            }
+
+            await this.human.sendHumanMessage(message, reportText);
+            
+            // Enviar relatório detalhado se houver muitos agendamentos
+            if (totalBookings > 10) {
+                await this.sendDetailedReport(message, allBookings);
+            }
+            
+        } catch (error) {
+            console.error('Erro ao gerar relatório completo:', error);
+            await this.human.sendHumanMessage(message, "❌ Erro ao gerar relatório. Tente novamente.");
+        }
+    }
+
+    async sendDetailedReport(message, bookings) {
+        await this.human.sendHumanMessage(message, "📋 Enviando relatório detalhado...");
+        
+        // Agrupar por status
+        const confirmedBookings = bookings.filter(b => b.status === 'confirmed');
+        const cancelledBookings = bookings.filter(b => b.status === 'cancelled');
+        const pendingBookings = bookings.filter(b => b.status === 'pending');
+        
+        // Relatório de confirmados
+        if (confirmedBookings.length > 0) {
+            let confirmedText = `✅ *AGENDAMENTOS CONFIRMADOS (${confirmedBookings.length})*\n\n`;
+            
+            confirmedBookings.forEach(booking => {
+                const bookingDate = moment(booking.date).format('DD/MM/YYYY');
+                const createdDate = moment(booking.created_at).format('DD/MM/YYYY HH:mm');
+                
+                confirmedText += `🆔 *ID: ${booking.id}*\n`;
+                confirmedText += `👤 Cliente: ${booking.customer_name}\n`;
+                confirmedText += `📱 Telefone: ${booking.user_id.replace('@c.us', '')}\n`;
+                confirmedText += `✂️ Serviço: ${booking.service_name}\n`;
+                confirmedText += `📅 Data Agendada: ${bookingDate}\n`;
+                confirmedText += `🕐 Horário: ${booking.time}\n`;
+                confirmedText += `💰 Valor: R$ ${parseFloat(booking.total_amount || 0).toFixed(2)}\n`;
+                confirmedText += `📝 Agendado em: ${createdDate}\n`;
+                if (booking.payment_status) {
+                    confirmedText += `💳 Pagamento: ${booking.payment_status}\n`;
+                }
+                confirmedText += `\n`;
+            });
+            
+            await this.human.sendHumanMessage(message, confirmedText);
+        }
+        
+        // Relatório de cancelados
+        if (cancelledBookings.length > 0) {
+            let cancelledText = `❌ *AGENDAMENTOS CANCELADOS (${cancelledBookings.length})*\n\n`;
+            
+            cancelledBookings.forEach(booking => {
+                const bookingDate = moment(booking.date).format('DD/MM/YYYY');
+                const createdDate = moment(booking.created_at).format('DD/MM/YYYY HH:mm');
+                
+                cancelledText += `🆔 *ID: ${booking.id}*\n`;
+                cancelledText += `👤 Cliente: ${booking.customer_name}\n`;
+                cancelledText += `📱 Telefone: ${booking.user_id.replace('@c.us', '')}\n`;
+                cancelledText += `✂️ Serviço: ${booking.service_name}\n`;
+                cancelledText += `📅 Data que seria: ${bookingDate}\n`;
+                cancelledText += `🕐 Horário: ${booking.time}\n`;
+                cancelledText += `💰 Valor: R$ ${parseFloat(booking.total_amount || 0).toFixed(2)}\n`;
+                cancelledText += `📝 Agendado em: ${createdDate}\n`;
+                cancelledText += `\n`;
+            });
+            
+            await this.human.sendHumanMessage(message, cancelledText);
+        }
+        
+        // Relatório de pendentes
+        if (pendingBookings.length > 0) {
+            let pendingText = `⏳ *AGENDAMENTOS PENDENTES (${pendingBookings.length})*\n\n`;
+            
+            pendingBookings.forEach(booking => {
+                const bookingDate = moment(booking.date).format('DD/MM/YYYY');
+                const createdDate = moment(booking.created_at).format('DD/MM/YYYY HH:mm');
+                
+                pendingText += `🆔 *ID: ${booking.id}*\n`;
+                pendingText += `👤 Cliente: ${booking.customer_name}\n`;
+                pendingText += `📱 Telefone: ${booking.user_id.replace('@c.us', '')}\n`;
+                pendingText += `✂️ Serviço: ${booking.service_name}\n`;
+                pendingText += `📅 Data: ${bookingDate}\n`;
+                pendingText += `🕐 Horário: ${booking.time}\n`;
+                pendingText += `💰 Valor: R$ ${parseFloat(booking.total_amount || 0).toFixed(2)}\n`;
+                pendingText += `📝 Agendado em: ${createdDate}\n`;
+                pendingText += `⚠️ *Ação necessária: Confirmar pagamento*\n`;
+                pendingText += `\n`;
+            });
+            
+            await this.human.sendHumanMessage(message, pendingText);
+        }
+    }
+
+    async showPeriodReport(message, period) {
+        try {
+            // Parsear período
+            const [startDateStr, endDateStr] = period.split(' - ');
+            const startDate = moment(startDateStr, 'DD/MM/YYYY');
+            const endDate = moment(endDateStr, 'DD/MM/YYYY');
+            
+            if (!startDate.isValid() || !endDate.isValid()) {
+                await this.human.sendHumanMessage(message, "❌ Formato de data inválido! Use: DD/MM/YYYY - DD/MM/YYYY");
+                return;
+            }
+            
+            if (startDate.isAfter(endDate)) {
+                await this.human.sendHumanMessage(message, "❌ Data inicial deve ser anterior à data final!");
+                return;
+            }
+            
+            await this.human.sendHumanMessage(message, `📊 Gerando relatório de ${startDate.format('DD/MM/YYYY')} até ${endDate.format('DD/MM/YYYY')}...`);
+            
+            // Buscar agendamentos do período
+            const bookings = await this.db.getBookingsByPeriod(
+                startDate.format('YYYY-MM-DD'),
+                endDate.format('YYYY-MM-DD')
+            );
+            
+            if (!bookings || bookings.length === 0) {
+                await this.human.sendHumanMessage(message, 
+                    `📊 *RELATÓRIO DO PERÍODO*\n` +
+                    `📅 ${startDate.format('DD/MM/YYYY')} - ${endDate.format('DD/MM/YYYY')}\n\n` +
+                    `❌ Nenhum agendamento encontrado neste período.`
+                );
+                return;
+            }
+            
+            // Calcular estatísticas
+            let totalBookings = bookings.length;
+            let confirmedBookings = 0;
+            let cancelledBookings = 0;
+            let pendingBookings = 0;
+            let totalRevenue = 0;
+            let confirmedRevenue = 0;
+            
+            // Agrupar por data
+            const bookingsByDate = {};
+            
+            bookings.forEach(booking => {
+                const bookingDate = moment(booking.date).format('YYYY-MM-DD');
+                
+                if (!bookingsByDate[bookingDate]) {
+                    bookingsByDate[bookingDate] = [];
+                }
+                bookingsByDate[bookingDate].push(booking);
+                
+                // Contar por status
+                switch (booking.status) {
+                    case 'confirmed':
+                        confirmedBookings++;
+                        confirmedRevenue += parseFloat(booking.total_amount || 0);
+                        break;
+                    case 'cancelled':
+                        cancelledBookings++;
+                        break;
+                    default:
+                        pendingBookings++;
+                }
+                
+                totalRevenue += parseFloat(booking.total_amount || 0);
+            });
+            
+            // Gerar relatório
+            let reportText = `📊 *RELATÓRIO DO PERÍODO*\n`;
+            reportText += `📅 ${startDate.format('DD/MM/YYYY')} - ${endDate.format('DD/MM/YYYY')}\n`;
+            reportText += `🕐 Gerado em: ${moment().format('DD/MM/YYYY HH:mm')}\n\n`;
+            
+            reportText += `📈 *RESUMO:*\n`;
+            reportText += `• Total: ${totalBookings} agendamentos\n`;
+            reportText += `• ✅ Confirmados: ${confirmedBookings}\n`;
+            reportText += `• ❌ Cancelados: ${cancelledBookings}\n`;
+            reportText += `• ⏳ Pendentes: ${pendingBookings}\n`;
+            reportText += `• 💰 Receita Total: R$ ${totalRevenue.toFixed(2)}\n`;
+            reportText += `• 💚 Receita Confirmada: R$ ${confirmedRevenue.toFixed(2)}\n\n`;
+            
+            // Detalhes por data
+            reportText += `📅 *DETALHES POR DATA:*\n`;
+            
+            const sortedDates = Object.keys(bookingsByDate).sort();
+            
+            sortedDates.forEach(date => {
+                const dateBookings = bookingsByDate[date];
+                const dateFormatted = moment(date).format('DD/MM/YYYY');
+                const dayName = moment(date).format('dddd');
+                
+                reportText += `\n📅 *${dateFormatted} (${dayName})*\n`;
+                reportText += `   ${dateBookings.length} agendamento(s)\n`;
+                
+                dateBookings.forEach(booking => {
+                    const status = booking.status === 'confirmed' ? '✅' : 
+                                  booking.status === 'cancelled' ? '❌' : '⏳';
+                    reportText += `   ${status} ${booking.time} - ${booking.customer_name}\n`;
+                    reportText += `      ${booking.service_name} (R$ ${parseFloat(booking.total_amount || 0).toFixed(2)})\n`;
+                });
+            });
+            
+            await this.human.sendHumanMessage(message, reportText);
+            
+        } catch (error) {
+            console.error('Erro ao gerar relatório por período:', error);
+            await this.human.sendHumanMessage(message, "❌ Erro ao gerar relatório. Verifique o formato da data e tente novamente.");
+        }
     }
 }
 
