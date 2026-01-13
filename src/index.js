@@ -4,7 +4,6 @@ const qrcode = require('qrcode-terminal');
 const express = require('express');
 const BarberBot = require('./bot/BarberBot');
 const Database = require('./database/Database');
-const SmartReminders = require('./ai/SmartReminders');
 const Scheduler = require('./utils/Scheduler');
 
 const app = express();
@@ -28,9 +27,6 @@ const client = new Client({
 // Inicializar bot
 const bot = new BarberBot(client, db);
 
-// Inicializar sistema de lembretes inteligentes
-const smartReminders = new SmartReminders(client, db);
-
 // Eventos do WhatsApp
 client.on('qr', (qr) => {
     console.log('📱 Escaneie o QR Code para conectar:');
@@ -47,12 +43,14 @@ client.on('ready', () => {
     console.log('✅ Bot conectado ao WhatsApp!');
     console.log('🏪 Barbearia - Sistema de Agendamento Ativo');
     console.log('🔧 Painel Admin: Digite /admin para acessar');
+    console.log('📱 Bot aguardando mensagens dos clientes...');
     
     // Limpar QR code quando conectado
     global.currentQR = null;
     
-    // Iniciar sistema de lembretes inteligentes
-    smartReminders.startReminderService();
+    // ❌ LEMBRETES AUTOMÁTICOS DESATIVADOS
+    // O bot só responde quando o cliente enviar mensagem
+    console.log('🚫 Lembretes automáticos desativados - Bot apenas reativo');
 });
 
 client.on('disconnected', (reason) => {
