@@ -97,10 +97,84 @@ class Database {
                 )
             `);
 
+            // Tabela de análise comportamental
+            this.db.run(`
+                CREATE TABLE IF NOT EXISTS behavior_analysis (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id TEXT NOT NULL,
+                    analysis_data TEXT NOT NULL,
+                    analysis_type TEXT NOT NULL,
+                    confidence_score REAL DEFAULT 0.5,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+
+            // Tabela de feedback
+            this.db.run(`
+                CREATE TABLE IF NOT EXISTS feedback (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id TEXT NOT NULL,
+                    booking_id INTEGER,
+                    rating INTEGER NOT NULL,
+                    comment TEXT,
+                    sentiment_score REAL,
+                    sentiment_label TEXT,
+                    categories TEXT,
+                    received_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    processed BOOLEAN DEFAULT FALSE,
+                    FOREIGN KEY (booking_id) REFERENCES bookings (id)
+                )
+            `);
+
+            // Tabela de interações do usuário
+            this.db.run(`
+                CREATE TABLE IF NOT EXISTS user_interactions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id TEXT NOT NULL,
+                    interaction_type TEXT NOT NULL,
+                    interaction_data TEXT,
+                    step TEXT,
+                    response_time INTEGER,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+
+            // Tabela de personas identificadas
+            this.db.run(`
+                CREATE TABLE IF NOT EXISTS user_personas (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id TEXT UNIQUE NOT NULL,
+                    persona_type TEXT NOT NULL,
+                    confidence_score REAL DEFAULT 0.5,
+                    characteristics TEXT,
+                    communication_style TEXT,
+                    last_updated DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+
+            // Tabela de previsões
+            this.db.run(`
+                CREATE TABLE IF NOT EXISTS predictions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id TEXT NOT NULL,
+                    prediction_type TEXT NOT NULL,
+                    prediction_data TEXT NOT NULL,
+                    confidence_score REAL DEFAULT 0.5,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    expires_at DATETIME
+                )
+            `);
+
             // Criar índices para melhor performance
             this.db.run(`CREATE INDEX IF NOT EXISTS idx_bookings_date_time ON bookings(date, time)`);
             this.db.run(`CREATE INDEX IF NOT EXISTS idx_blocked_times_date_time ON blocked_times(date, time)`);
             this.db.run(`CREATE INDEX IF NOT EXISTS idx_reservations_date_time ON time_reservations(date, time)`);
+            this.db.run(`CREATE INDEX IF NOT EXISTS idx_behavior_user_id ON behavior_analysis(user_id)`);
+            this.db.run(`CREATE INDEX IF NOT EXISTS idx_feedback_user_id ON feedback(user_id)`);
+            this.db.run(`CREATE INDEX IF NOT EXISTS idx_interactions_user_id ON user_interactions(user_id)`);
+            this.db.run(`CREATE INDEX IF NOT EXISTS idx_personas_user_id ON user_personas(user_id)`);
+            this.db.run(`CREATE INDEX IF NOT EXISTS idx_predictions_user_id ON predictions(user_id)`);
         });
 
         console.log('✅ Banco de dados inicializado');
@@ -600,6 +674,322 @@ class Database {
             this.db.all(query, [], (err, rows) => {
                 if (err) {
                     console.error('Erro ao buscar clientes mais frequentes:', err);
+                    reject(err);
+                } else {
+                    resolve(rows);
+                }
+            });
+        });
+    }
+
+    // ========== MÉTODOS PARA IA AVANÇADA ==========
+
+    async saveBehaviorAnalysis(userId, analysisData) {
+        return new Promise((resolve, reject) => {
+            const query = `
+                INSERT OR REPLACE INTO behavior_analysis 
+                (user_id, analysis_data, analysis_type, confidence_score, updated_at)
+                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+            `;
+
+            this.db.run(
+                query,
+                [
+                    userId, 
+                    JSON.stringify(analysisData), 
+                    'comprehensive',
+                    analysisData.confidence || 0.5
+                ],
+                function(err) {
+                    if (err) {
+                        reject(err);
+                    } else {
+                        resolve({ id: this.lastID });
+                    }
+                }
+            );
+        });
+    }
+
+    async getBehaviorAnalysis(userId) {
+        return new Promise((resolve, reject) => {
+            const query = `
+                SELECT * FROM behavior_analysis 
+                WHERE user_id = ? 
+                ORDER BY updated_at DESC 
+                LIMIT 1
+            `;
+
+            this.db.get(query, [userId], (err, row) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    if (row) {
+                        row.analysis_data = JSON.parse(row.analysis_data);
+                    }
+                    resolve(row);
+                }
+            });
+        });
+    }
+
+    async saveUserInteraction(userId, interactionData) {
+        return new Promise((resolve, reject) => {
+            const query = `
+                INSERT INTO user_interactions 
+                (user_id, interaction_type, interaction_data, step, response_time)
+                VALUES (?, ?, ?, ?, ?)
+            `;
+
+            this.db.run(
+                query,
+                [
+                    userId,
+                    interactionData.type,
+                    JSON.stringify(interactionData),
+                    interactionData.step,
+                    interactionData.responseTime
+                ],
+                function(err) {
+                    if (err) {
+                        reject(err);
+                    } else {
+                        resolve({ id: this.lastID });
+                    }
+                }
+            );
+        });
+    }
+
+    async getUserInteractions(userId, limit = 50) {
+        return new Promise((resolve, reject) => {
+            const query = `
+                SELECT * FROM user_interactions 
+                WHERE user_id = ? 
+                ORDER BY timestamp DESC 
+                LIMIT ?
+            `;
+
+            this.db.all(query, [userId, limit], (err, rows) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    const interactions = rows.map(row => ({
+                        ...row,
+                        interaction_data: JSON.parse(row.interaction_data || '{}')
+                    }));
+                    resolve(interactions);
+                }
+            });
+        });
+    }
+
+    async saveUserPersona(userId, personaData) {
+        return new Promise((resolve, reject) => {
+            const query = `
+                INSERT OR REPLACE INTO user_personas 
+                (user_id, persona_type, confidence_score, characteristics, communication_style, last_updated)
+                VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            `;
+
+            this.db.run(
+                query,
+                [
+                    userId,
+                    personaData.persona,
+                    personaData.confidence,
+                    JSON.stringify(personaData.characteristics),
+                    personaData.communicationStyle
+                ],
+                function(err) {
+                    if (err) {
+                        reject(err);
+                    } else {
+                        resolve({ id: this.lastID });
+                    }
+                }
+            );
+        });
+    }
+
+    async getUserPersona(userId) {
+        return new Promise((resolve, reject) => {
+            const query = `
+                SELECT * FROM user_personas 
+                WHERE user_id = ?
+            `;
+
+            this.db.get(query, [userId], (err, row) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    if (row) {
+                        row.characteristics = JSON.parse(row.characteristics || '{}');
+                    }
+                    resolve(row);
+                }
+            });
+        });
+    }
+
+    async saveFeedback(feedbackData) {
+        return new Promise((resolve, reject) => {
+            const query = `
+                INSERT INTO feedback 
+                (user_id, booking_id, rating, comment, sentiment_score, sentiment_label, categories)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            `;
+
+            this.db.run(
+                query,
+                [
+                    feedbackData.userId,
+                    feedbackData.bookingId,
+                    feedbackData.rating,
+                    feedbackData.comment,
+                    feedbackData.sentiment?.score,
+                    feedbackData.sentiment?.label,
+                    JSON.stringify(feedbackData.categories)
+                ],
+                function(err) {
+                    if (err) {
+                        reject(err);
+                    } else {
+                        resolve({ id: this.lastID, ...feedbackData });
+                    }
+                }
+            );
+        });
+    }
+
+    async getFeedbacksByPeriod(startDate, endDate = null) {
+        return new Promise((resolve, reject) => {
+            let query = `
+                SELECT f.*, b.customer_name, b.service_name 
+                FROM feedback f
+                LEFT JOIN bookings b ON f.booking_id = b.id
+                WHERE f.received_at >= ?
+            `;
+            
+            const params = [startDate];
+            
+            if (endDate) {
+                query += ` AND f.received_at <= ?`;
+                params.push(endDate);
+            }
+            
+            query += ` ORDER BY f.received_at DESC`;
+
+            this.db.all(query, params, (err, rows) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    const feedbacks = rows.map(row => ({
+                        ...row,
+                        categories: JSON.parse(row.categories || '{}'),
+                        sentiment: {
+                            score: row.sentiment_score,
+                            label: row.sentiment_label
+                        }
+                    }));
+                    resolve(feedbacks);
+                }
+            });
+        });
+    }
+
+    async savePrediction(userId, predictionData) {
+        return new Promise((resolve, reject) => {
+            const expiresAt = moment().add(7, 'days').toISOString(); // Previsões expiram em 7 dias
+            
+            const query = `
+                INSERT INTO predictions 
+                (user_id, prediction_type, prediction_data, confidence_score, expires_at)
+                VALUES (?, ?, ?, ?, ?)
+            `;
+
+            this.db.run(
+                query,
+                [
+                    userId,
+                    predictionData.type,
+                    JSON.stringify(predictionData.data),
+                    predictionData.confidence,
+                    expiresAt
+                ],
+                function(err) {
+                    if (err) {
+                        reject(err);
+                    } else {
+                        resolve({ id: this.lastID });
+                    }
+                }
+            );
+        });
+    }
+
+    async getPrediction(userId, predictionType) {
+        return new Promise((resolve, reject) => {
+            const query = `
+                SELECT * FROM predictions 
+                WHERE user_id = ? AND prediction_type = ? 
+                AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
+                ORDER BY created_at DESC 
+                LIMIT 1
+            `;
+
+            this.db.get(query, [userId, predictionType], (err, row) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    if (row) {
+                        row.prediction_data = JSON.parse(row.prediction_data);
+                    }
+                    resolve(row);
+                }
+            });
+        });
+    }
+
+    async cleanExpiredPredictions() {
+        return new Promise((resolve, reject) => {
+            const query = `
+                DELETE FROM predictions 
+                WHERE expires_at IS NOT NULL AND expires_at <= CURRENT_TIMESTAMP
+            `;
+
+            this.db.run(query, [], function(err) {
+                if (err) {
+                    reject(err);
+                } else {
+                    console.log(`🧹 Removidas ${this.changes} previsões expiradas`);
+                    resolve({ changes: this.changes });
+                }
+            });
+        });
+    }
+
+    // Método para obter dados de todos os clientes para análise de churn
+    async getAllCustomerData() {
+        return new Promise((resolve, reject) => {
+            const query = `
+                SELECT 
+                    b.user_id,
+                    b.customer_name,
+                    COUNT(b.id) as total_bookings,
+                    COUNT(CASE WHEN b.status = 'confirmed' THEN 1 END) as confirmed_bookings,
+                    COUNT(CASE WHEN b.status = 'cancelled' THEN 1 END) as cancelled_bookings,
+                    MAX(b.date) as last_booking_date,
+                    MIN(b.date) as first_booking_date,
+                    AVG(CASE WHEN b.status = 'confirmed' THEN 1 ELSE 0 END) as completion_rate
+                FROM bookings b
+                GROUP BY b.user_id, b.customer_name
+                HAVING total_bookings > 0
+                ORDER BY last_booking_date DESC
+            `;
+
+            this.db.all(query, [], (err, rows) => {
+                if (err) {
                     reject(err);
                 } else {
                     resolve(rows);

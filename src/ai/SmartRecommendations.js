@@ -156,20 +156,25 @@ class SmartRecommendations {
     async getSmartRecommendations(userId) {
         const profile = await this.analyzeClient(userId);
         const services = Settings.get('services');
+        
+        // Usar apenas serviços populares para recomendações mais focadas
+        const popularServices = services.filter(s => s.popular);
         const recommendations = [];
 
         // Recomendação baseada no perfil
         if (profile.loyaltyLevel === 'new') {
-            recommendations.push(...this.getNewClientRecommendations(services));
+            recommendations.push(...this.getNewClientRecommendations(popularServices));
         } else {
-            recommendations.push(...this.getReturningClientRecommendations(profile, services));
+            recommendations.push(...this.getReturningClientRecommendations(profile, popularServices));
         }
 
-        // Recomendações sazonais
-        recommendations.push(...this.getSeasonalRecommendations(services));
+        // Recomendações sazonais (apenas serviços populares)
+        const seasonalRecs = this.getSeasonalRecommendations(popularServices);
+        recommendations.push(...seasonalRecs);
 
-        // Recomendações de combo
-        recommendations.push(...this.getComboRecommendations(profile, services));
+        // Recomendações de combo (apenas serviços populares)
+        const comboRecs = this.getComboRecommendations(profile, popularServices);
+        recommendations.push(...comboRecs);
 
         return this.rankRecommendations(recommendations, profile);
     }

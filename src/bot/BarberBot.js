@@ -9,6 +9,11 @@ const HumanLike = require('../utils/HumanLike');
 const AdminPanel = require('../admin/AdminPanel');
 const Settings = require('../config/settings');
 const SmartRecommendations = require('../ai/SmartRecommendations');
+const AdvancedAI = require('../ai/AdvancedAI');
+const PersonaEngine = require('../ai/PersonaEngine');
+const BehaviorTracker = require('../ai/BehaviorTracker');
+const PredictiveAnalytics = require('../ai/PredictiveAnalytics');
+const FeedbackEngine = require('../ai/FeedbackEngine');
 
 class BarberBot {
     constructor(client, database) {
@@ -19,18 +24,46 @@ class BarberBot {
         this.adminNumbers = ADMIN_NUMBERS;
         this.human = new HumanLike(client); // Funcionalidades humanizadas
         this.adminPanel = new AdminPanel(client, database, this.human); // Painel administrativo
-        this.ai = new SmartRecommendations(database); // IA de recomendações
+        
+        // ========== SISTEMA DE IA AVANÇADO 3.0 ==========
+        this.ai = new SmartRecommendations(database); // IA de recomendações (mantida para compatibilidade)
+        this.advancedAI = new AdvancedAI(database); // IA avançada com ML
+        this.behaviorTracker = new BehaviorTracker(database); // Rastreamento comportamental
+        this.personaEngine = new PersonaEngine(this.advancedAI); // Engine de personas
+        this.predictiveAnalytics = new PredictiveAnalytics(database, this.behaviorTracker); // Analytics preditivos
+        this.feedbackEngine = new FeedbackEngine(database, this.behaviorTracker); // Engine de feedback
+        
+        // Inicializar limpeza periódica
+        this.behaviorTracker.startPeriodicCleanup();
+        this.startAIMaintenance();
+        
+        console.log('🤖 BarberBot AI 3.0 inicializado com sucesso!');
+        console.log('   ✅ Machine Learning básico ativo');
+        console.log('   ✅ Sistema de personas dinâmicas ativo');
+        console.log('   ✅ Rastreamento comportamental ativo');
+        console.log('   ✅ Analytics preditivos ativo');
+        console.log('   ✅ Engine de feedback ativo');
+        console.log('   ✅ Manutenção automática ativa');
     }
 
     async handleMessage(message) {
         const userId = message.from;
         const messageText = message.body.toLowerCase().trim();
+        const messageStartTime = Date.now();
         
         // 🚫 IGNORAR GRUPOS - Só responder em conversas privadas
         if (message.from.includes('@g.us')) {
             console.log(`🚫 Mensagem ignorada de grupo: ${message.from}`);
             return; // Não processar mensagens de grupos
         }
+        
+        // 🤖 RASTREAMENTO COMPORTAMENTAL AVANÇADO
+        await this.trackUserInteraction(userId, {
+            type: 'message',
+            content: message.body,
+            timestamp: messageStartTime,
+            step: this.getCurrentStep(userId)
+        });
         
         // Verificar comandos de admin primeiro
         if (messageText === '/admin') {
@@ -51,6 +84,12 @@ class BarberBot {
 
         // Comando global para voltar ao menu principal
         if (messageText === '0' || messageText.toLowerCase().includes('voltar ao menu')) {
+            await this.trackUserInteraction(userId, {
+                type: 'navigation',
+                content: 'back_to_menu',
+                timestamp: Date.now()
+            });
+            
             await this.sendWelcomeMessage(message);
             this.userSessions.set(userId, { step: 'menu', userId: userId });
             return;
@@ -83,7 +122,8 @@ class BarberBot {
             customerName: null,
             paymentId: null,
             userId: userId, // Garantir isolamento por usuário
-            monitoring: false
+            monitoring: false,
+            sessionStartTime: Date.now() // Para análise de tempo de sessão
         };
 
         try {
@@ -95,13 +135,38 @@ class BarberBot {
 
                 case 'menu':
                     if (messageText.includes('agendar') || messageText.includes('1')) {
+                        await this.trackUserInteraction(userId, {
+                            type: 'decision',
+                            content: 'selected_booking',
+                            timeToDecide: Date.now() - messageStartTime,
+                            context: 'main_menu'
+                        });
+                        
                         await this.sendServicesMenu(message);
                         session.step = 'selecting_service';
                     } else if (messageText.includes('horário') || messageText.includes('2')) {
+                        await this.trackUserInteraction(userId, {
+                            type: 'decision',
+                            content: 'selected_schedule_info',
+                            context: 'main_menu'
+                        });
+                        
                         await this.sendScheduleInfo(message);
                     } else if (messageText.includes('localização') || messageText.includes('3')) {
+                        await this.trackUserInteraction(userId, {
+                            type: 'decision',
+                            content: 'selected_location_info',
+                            context: 'main_menu'
+                        });
+                        
                         await this.sendLocationInfo(message);
                     } else if (messageText.includes('cancelar') || messageText.includes('4')) {
+                        await this.trackUserInteraction(userId, {
+                            type: 'decision',
+                            content: 'selected_cancellation',
+                            context: 'main_menu'
+                        });
+                        
                         await this.showUserBookings(message);
                         session.step = 'canceling_booking';
                     } else if (messageText === '0' || messageText.includes('voltar')) {
@@ -115,11 +180,24 @@ class BarberBot {
                 case 'selecting_service':
                     const serviceId = this.extractServiceId(messageText);
                     if (serviceId === 'back') {
+                        await this.trackUserInteraction(userId, {
+                            type: 'navigation',
+                            content: 'back_from_service_selection',
+                            context: 'service_selection'
+                        });
+                        
                         await this.sendWelcomeMessage(message);
                         session.step = 'menu';
                     } else if (serviceId) {
                         session.selectedService = this.getServiceById(serviceId);
                         if (session.selectedService) {
+                            await this.trackUserInteraction(userId, {
+                                type: 'decision',
+                                content: `selected_service_${serviceId}`,
+                                timeToDecide: Date.now() - messageStartTime,
+                                context: 'service_selection'
+                            });
+                            
                             await this.sendDateSelection(message);
                             session.step = 'selecting_date';
                         } else {
@@ -134,10 +212,24 @@ class BarberBot {
                 case 'selecting_date':
                     const date = this.extractDate(messageText);
                     if (date === 'back') {
+                        await this.trackUserInteraction(userId, {
+                            type: 'navigation',
+                            content: 'back_from_date_selection',
+                            context: 'date_selection'
+                        });
+                        
                         await this.sendServicesMenu(message);
                         session.step = 'selecting_service';
                     } else if (date && this.isValidDate(date)) {
                         session.selectedDate = date;
+                        
+                        await this.trackUserInteraction(userId, {
+                            type: 'decision',
+                            content: `selected_date_${date.format('YYYY-MM-DD')}`,
+                            timeToDecide: Date.now() - messageStartTime,
+                            context: 'date_selection'
+                        });
+                        
                         await this.sendTimeSelection(message, date);
                         session.step = 'selecting_time';
                     } else {
@@ -149,10 +241,24 @@ class BarberBot {
                 case 'selecting_time':
                     const time = await this.extractTime(messageText, userId);
                     if (time === 'back') {
+                        await this.trackUserInteraction(userId, {
+                            type: 'navigation',
+                            content: 'back_from_time_selection',
+                            context: 'time_selection'
+                        });
+                        
                         await this.sendDateSelection(message);
                         session.step = 'selecting_date';
                     } else if (time && await this.isTimeAvailable(session.selectedDate, time)) {
                         session.selectedTime = time;
+                        
+                        await this.trackUserInteraction(userId, {
+                            type: 'decision',
+                            content: `selected_time_${time}`,
+                            timeToDecide: Date.now() - messageStartTime,
+                            context: 'time_selection'
+                        });
+                        
                         await this.requestCustomerName(message);
                         session.step = 'getting_name';
                     } else {
@@ -163,18 +269,44 @@ class BarberBot {
 
                 case 'getting_name':
                     session.customerName = message.body.trim();
+                    
+                    await this.trackUserInteraction(userId, {
+                        type: 'input',
+                        content: 'provided_name',
+                        context: 'name_input'
+                    });
+                    
                     await this.sendBookingSummary(message, session);
                     session.step = 'confirming_booking';
                     break;
 
                 case 'confirming_booking':
                     if (messageText.includes('confirmar') || messageText.includes('sim') || messageText.includes('perfeito')) {
+                        await this.trackUserInteraction(userId, {
+                            type: 'decision',
+                            content: 'confirmed_booking',
+                            timeToDecide: Date.now() - messageStartTime,
+                            context: 'booking_confirmation'
+                        });
+                        
                         await this.processPayment(message, session);
                         session.step = 'payment_pending';
                     } else if (messageText.includes('cancelar') || messageText.includes('não')) {
+                        await this.trackUserInteraction(userId, {
+                            type: 'decision',
+                            content: 'cancelled_booking',
+                            context: 'booking_confirmation'
+                        });
+                        
                         await this.cancelBooking(message);
                         session.step = 'menu';
                     } else if (messageText.includes('nome') || messageText.includes('mudar')) {
+                        await this.trackUserInteraction(userId, {
+                            type: 'decision',
+                            content: 'change_name',
+                            context: 'booking_confirmation'
+                        });
+                        
                         await this.requestCustomerName(message);
                         session.step = 'getting_name';
                     } else {
@@ -200,7 +332,14 @@ class BarberBot {
 
         } catch (error) {
             console.error('Erro ao processar mensagem:', error);
-            await message.reply('❌ Ocorreu um erro. Vou reiniciar nossa conversa.');
+            
+            await this.trackUserInteraction(userId, {
+                type: 'error',
+                content: error.message,
+                context: session.step
+            });
+            
+            await this.human.sendHumanMessage(message, '❌ Ocorreu um erro. Vou reiniciar nossa conversa.');
             this.userSessions.delete(userId);
         }
     }
@@ -295,17 +434,17 @@ Digite o número da opção desejada! 👆`;
         // Simular que está pensando
         await this.human.sendHumanMessage(message, this.getRandomMessage('thinking'));
         
-        // Obter recomendações inteligentes
+        // Obter recomendações inteligentes focadas em serviços populares
         const recommendations = await this.ai.getSmartRecommendations(userId);
         const services = this.getAllServices();
         
         let servicesText = `✂️ *NOSSOS SERVIÇOS*\n\n`;
 
-        // Mostrar recomendações da IA primeiro
+        // Mostrar recomendações da IA primeiro (apenas se houver)
         if (recommendations.length > 0) {
-            servicesText += `🤖 *IA RECOMENDA PARA VOCÊ:*\n\n`;
+            servicesText += `🤖 *RECOMENDADO PARA VOCÊ:*\n\n`;
             
-            recommendations.forEach(rec => {
+            recommendations.slice(0, 2).forEach(rec => {
                 const emojiNumber = this.human.numberToEmoji(rec.service.id);
                 servicesText += `${emojiNumber} *${rec.service.name}* 🎯\n`;
                 servicesText += `💰 ${rec.service.price}\n`;
@@ -843,7 +982,7 @@ Após o pagamento, seu agendamento será confirmado automaticamente! ✅
 
         } catch (error) {
             console.error('Erro ao processar pagamento:', error);
-            await message.reply('❌ Erro ao gerar pagamento. Tente novamente.');
+            await this.human.sendHumanMessage(message, '❌ Erro ao gerar pagamento. Tente novamente.');
         }
     }
 
@@ -1786,6 +1925,267 @@ Obrigado pela preferência! 🙏`;
             await this.human.sendHumanMessage(message, 
                 "❌ Erro ao confirmar agendamento. Entre em contato conosco com o comprovante do pagamento.");
         }
+    }
+
+    // ========== MÉTODOS DE INTEGRAÇÃO COM IA AVANÇADA ==========
+
+    async trackUserInteraction(userId, interactionData) {
+        try {
+            await this.behaviorTracker.trackUserInteraction(userId, interactionData);
+        } catch (error) {
+            console.error('Erro ao rastrear interação:', error);
+        }
+    }
+
+    getCurrentStep(userId) {
+        const session = this.userSessions.get(userId);
+        return session ? session.step : 'unknown';
+    }
+
+    async sendPersonalizedWelcome(message) {
+        try {
+            const userId = message.from;
+            
+            // Gerar mensagem personalizada usando o sistema de personas
+            const personalizedMessage = await this.personaEngine.generatePersonalizedMessage(
+                userId, 
+                'welcome', 
+                { 
+                    behavior: await this.advancedAI.analyzeClientBehavior(userId),
+                    isReturning: await this.isReturningCustomer(userId)
+                }
+            );
+
+            if (personalizedMessage && personalizedMessage.message) {
+                // Usar mensagem personalizada
+                await this.sendPersonalizedWelcomeMessage(message, personalizedMessage);
+            } else {
+                // Fallback para mensagem padrão
+                await this.sendWelcomeMessage(message);
+            }
+        } catch (error) {
+            console.error('Erro ao enviar boas-vindas personalizadas:', error);
+            // Fallback para mensagem padrão
+            await this.sendWelcomeMessage(message);
+        }
+    }
+
+    async sendPersonalizedWelcomeMessage(message, personalizedData) {
+        const business = Settings.get('businessInfo');
+        
+        const welcomeText = `${personalizedData.message}
+
+🏪 *${business.name}*
+📍 ${business.address}
+📞 ${business.phone}
+
+O que você gostaria de fazer hoje?`;
+
+        const buttons = [
+            {
+                buttonId: 'menu_1',
+                buttonText: { displayText: '✂️ Quero Agendar' },
+                type: 1
+            },
+            {
+                buttonId: 'menu_2',
+                buttonText: { displayText: '🕐 Ver Horários' },
+                type: 1
+            },
+            {
+                buttonId: 'menu_3',
+                buttonText: { displayText: '📍 Onde Fica' },
+                type: 1
+            },
+            {
+                buttonId: 'menu_4',
+                buttonText: { displayText: '❌ Cancelar Agendamento' },
+                type: 1
+            }
+        ];
+
+        const buttonMessage = {
+            text: welcomeText,
+            buttons: buttons,
+            headerType: 1
+        };
+
+        try {
+            // Menu principal é instantâneo - sem delay
+            await this.client.sendMessage(message.from, buttonMessage);
+        } catch (error) {
+            // Fallback para texto simples - também instantâneo
+            const fallbackText = welcomeText + `
+
+${this.human.numberToEmoji(1)} Agendar Serviço
+${this.human.numberToEmoji(2)} Ver Horários de Funcionamento  
+${this.human.numberToEmoji(3)} Localização e Contato
+${this.human.numberToEmoji(4)} Cancelar Agendamento
+
+Digite o número da opção! 👆`;
+            
+            await message.reply(fallbackText);
+        }
+    }
+
+    async isReturningCustomer(userId) {
+        try {
+            const bookings = await this.db.getBookingsByCustomer(userId, 1);
+            return bookings.length > 0;
+        } catch (error) {
+            console.error('Erro ao verificar cliente retornante:', error);
+            return false;
+        }
+    }
+
+    async trackBookingCompletion(userId, bookingData) {
+        try {
+            await this.behaviorTracker.trackBookingBehavior(userId, {
+                id: bookingData.id,
+                serviceName: bookingData.serviceName,
+                timeToBook: Date.now() - (bookingData.sessionStartTime || Date.now()),
+                completed: true,
+                paymentMethod: 'pix'
+            });
+        } catch (error) {
+            console.error('Erro ao rastrear conclusão de agendamento:', error);
+        }
+    }
+
+    async trackBookingCancellation(userId, bookingData) {
+        try {
+            await this.behaviorTracker.trackCancellationBehavior(userId, {
+                bookingId: bookingData.id,
+                reason: bookingData.reason || 'user_request',
+                timeBeforeAppointment: moment(`${bookingData.date} ${bookingData.time}`).diff(moment(), 'hours')
+            });
+        } catch (error) {
+            console.error('Erro ao rastrear cancelamento:', error);
+        }
+    }
+
+    async generatePersonalizedResponse(userId, context, baseMessage) {
+        try {
+            const personalizedMessage = await this.personaEngine.generatePersonalizedMessage(
+                userId,
+                context.type || 'generic',
+                context
+            );
+
+            if (personalizedMessage && personalizedMessage.message) {
+                return personalizedMessage.message;
+            }
+        } catch (error) {
+            console.error('Erro ao gerar resposta personalizada:', error);
+        }
+        
+        return baseMessage; // Fallback
+    }
+
+    async predictOptimalResponseTime(userId) {
+        try {
+            const prediction = await this.behaviorTracker.predictOptimalResponseTime(userId);
+            return prediction.optimal;
+        } catch (error) {
+            console.error('Erro ao prever tempo de resposta ótimo:', error);
+            return 2000; // Fallback padrão
+        }
+    }
+
+    async analyzeUserEngagement(userId) {
+        try {
+            return await this.behaviorTracker.analyzeEngagementLevel(userId);
+        } catch (error) {
+            console.error('Erro ao analisar engajamento:', error);
+            return { level: 'medium', score: 0.5 };
+        }
+    }
+
+    async requestFeedbackAfterService(userId, bookingId) {
+        try {
+            // Agendar solicitação de feedback 2 horas após o serviço
+            setTimeout(async () => {
+                const feedbackRequest = await this.feedbackEngine.requestFeedback(userId, bookingId);
+                
+                if (feedbackRequest && feedbackRequest.message) {
+                    await this.human.sendHumanMessage({ from: userId }, feedbackRequest.message);
+                }
+            }, 2 * 60 * 60 * 1000); // 2 horas
+        } catch (error) {
+            console.error('Erro ao agendar solicitação de feedback:', error);
+        }
+    }
+
+    // ========== MÉTODOS DE ANÁLISE E RELATÓRIOS IA ==========
+
+    async generateAIInsights() {
+        try {
+            const insights = {
+                demandPrediction: await this.predictiveAnalytics.predictDemandByTimeSlot(),
+                serviceDemand: await this.predictiveAnalytics.predictServiceDemand(),
+                churnAnalysis: await this.advancedAI.analyzeChurnPatterns(),
+                satisfactionMetrics: await this.feedbackEngine.calculateSatisfactionMetrics(),
+                capacityPrediction: await this.predictiveAnalytics.predictCapacityNeeds()
+            };
+
+            return insights;
+        } catch (error) {
+            console.error('Erro ao gerar insights de IA:', error);
+            return null;
+        }
+    }
+
+    async getPersonaDistribution() {
+        try {
+            // Implementar análise de distribuição de personas
+            const allCustomers = await this.db.getAllCustomerData();
+            const personaDistribution = {};
+
+            for (const customer of allCustomers) {
+                try {
+                    const persona = await this.personaEngine.identifyPersona(customer.user_id);
+                    const personaType = persona.persona;
+                    
+                    personaDistribution[personaType] = (personaDistribution[personaType] || 0) + 1;
+                } catch (error) {
+                    console.error(`Erro ao identificar persona para ${customer.user_id}:`, error);
+                }
+            }
+
+            return personaDistribution;
+        } catch (error) {
+            console.error('Erro ao obter distribuição de personas:', error);
+            return {};
+        }
+    }
+
+    // ========== LIMPEZA E MANUTENÇÃO IA ==========
+
+    async performAIMaintenance() {
+        try {
+            console.log('🧹 Iniciando manutenção do sistema de IA...');
+            
+            // Limpar previsões expiradas
+            await this.db.cleanExpiredPredictions();
+            
+            // Limpar cache de análises
+            this.advancedAI.predictionCache.clear();
+            this.predictiveAnalytics.clearExpiredCache();
+            
+            // Limpar sessões comportamentais expiradas
+            this.behaviorTracker.clearExpiredSessions();
+            
+            console.log('✅ Manutenção do sistema de IA concluída');
+        } catch (error) {
+            console.error('Erro na manutenção do sistema de IA:', error);
+        }
+    }
+
+    // Executar manutenção periodicamente (a cada 6 horas)
+    startAIMaintenance() {
+        setInterval(() => {
+            this.performAIMaintenance();
+        }, 6 * 60 * 60 * 1000); // 6 horas
     }
 }
 
